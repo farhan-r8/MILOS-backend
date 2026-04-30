@@ -7,6 +7,10 @@ const normalizeRole = (role) => {
     return 'nasabah';
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const isValidEmail = (email) => EMAIL_REGEX.test(String(email || '').trim());
+
 const mapUserRow = (row) => ({
     id: String(row.id_user ?? row.id ?? ''),
     name: row.nama ?? row.name ?? '',
@@ -86,6 +90,12 @@ exports.createUser = (req, res) => {
         });
     }
 
+    if (!isValidEmail(email)) {
+        return res.status(400).json({
+            message: 'Format email tidak valid'
+        });
+    }
+
     return createUserRecord({ nama, email, password, role, phone, address }, res);
 };
 
@@ -99,6 +109,12 @@ exports.registerNasabah = (req, res) => {
     if (!nama || !email || !password || !phone || !address) {
         return res.status(400).json({
             message: 'Field wajib: name/nama, email, password, phone, address'
+        });
+    }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({
+            message: 'Format email tidak valid'
         });
     }
 
@@ -158,6 +174,12 @@ exports.loginUser = (req, res) => {
     if (!email || !password) {
         return res.status(400).json({
             message: 'Field wajib: email, password'
+        });
+    }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({
+            message: 'Format email tidak valid'
         });
     }
 
@@ -289,6 +311,12 @@ exports.loginAdmin = (req, res) => {
     if (!email || !password) {
         return res.status(400).json({
             message: 'Field wajib: email, password'
+        });
+    }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({
+            message: 'Admin wajib menggunakan email yang valid'
         });
     }
 
