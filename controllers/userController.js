@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { createToken } = require('../utils/token');
 const { verifyGoogleCredential } = require('../utils/googleAuth');
+const { hashPassword, verifyPassword, isHashedPassword } = require('../utils/password');
 
 const normalizeRole = (role) => {
     if (role === 'admin' || role === 'nasabah') return role;
@@ -32,9 +33,9 @@ const createAuthResponse = (user, message) => ({
     user: mapUserRow(user)
 });
 
-const createUserRecord = ({ nama, email, password, role, phone, address }, res) => {
+const createUserRecord = async ({ nama, email, password, role, phone, address }, res) => {
     const checkEmailSql = 'SELECT id_user FROM user WHERE email = ? LIMIT 1';
-    db.query(checkEmailSql, [email], (checkErr, existingUsers) => {
+    db.query(checkEmailSql, [email], async (checkErr, existingUsers) => {
         if (checkErr) return res.status(500).json(checkErr);
 
         if (existingUsers.length > 0) {
@@ -49,8 +50,9 @@ const createUserRecord = ({ nama, email, password, role, phone, address }, res) 
             });
         }
 
+        const hashedPassword = await hashPassword(password);
         const insertSql = 'INSERT INTO user (nama, email, password, role, phone, address) VALUES (?, ?, ?, ?, ?, ?)';
-        db.query(insertSql, [nama, email, password, role, phone, address], (insertErr, insertResult) => {
+        db.query(insertSql, [nama, email, hashedPassword, role, phone, address], (insertErr, insertResult) => {
             if (insertErr) return res.status(500).json(insertErr);
 
             return res.status(201).json({
@@ -184,7 +186,7 @@ exports.loginUser = (req, res) => {
     }
 
     const sql = 'SELECT * FROM user WHERE email = ? AND role = ? LIMIT 1';
-    db.query(sql, [email, role], (err, result) => {
+    db.query(sql, [email, role], async (err, result) => {
         if (err) return res.status(500).json(err);
         if (!result || result.length === 0) {
             return res.status(401).json({
@@ -193,10 +195,17 @@ exports.loginUser = (req, res) => {
         }
 
         const user = result[0];
-        if (user.password !== password) {
+        const isPasswordValid = await verifyPassword(password, user.password);
+        if (!isPasswordValid) {
             return res.status(401).json({
                 message: 'Password salah'
             });
+        }
+
+        if (!isHashedPassword(user.password)) {
+            const hashedPassword = await hashPassword(password);
+            db.query('UPDATE user SET password = ? WHERE id_user = ?', [hashedPassword, user.id_user]);
+            user.password = hashedPassword;
         }
 
         return res.json(createAuthResponse(user, 'Login berhasil'));
@@ -240,10 +249,11 @@ exports.registerGoogleUser = async (req, res) => {
                     VALUES (?, ?, ?, 'nasabah', ?, ?)
                 `;
 
-                db.query(
-                    insertSql,
-                    [googleUser.name, googleUser.email, generatedPassword, phone, address],
-                    (insertErr, insertResult) => {
+                hashPassword(generatedPassword).then((hashedPassword) => {
+                    db.query(
+                        insertSql,
+                        [googleUser.name, googleUser.email, hashedPassword, phone, address],
+                        (insertErr, insertResult) => {
                         if (insertErr) return res.status(500).json(insertErr);
 
                         const user = {
@@ -256,9 +266,14 @@ exports.registerGoogleUser = async (req, res) => {
                             poin: 0
                         };
 
-                        return res.status(201).json(createAuthResponse(user, 'Registrasi Google berhasil'));
-                    }
-                );
+                            return res.status(201).json(createAuthResponse(user, 'Registrasi Google berhasil'));
+                        }
+                    );
+                }).catch((hashError) => {
+                    return res.status(500).json({
+                        message: hashError.message || 'Gagal memproses password akun Google'
+                    });
+                });
             }
         );
     } catch (error) {
@@ -321,7 +336,7 @@ exports.loginAdmin = (req, res) => {
     }
 
     const sql = "SELECT * FROM user WHERE email = ? AND role = 'admin' LIMIT 1";
-    db.query(sql, [email], (err, result) => {
+    db.query(sql, [email], async (err, result) => {
         if (err) return res.status(500).json(err);
         if (!result || result.length === 0) {
             return res.status(401).json({
@@ -330,10 +345,17 @@ exports.loginAdmin = (req, res) => {
         }
 
         const user = result[0];
-        if (user.password !== password) {
+        const isPasswordValid = await verifyPassword(password, user.password);
+        if (!isPasswordValid) {
             return res.status(401).json({
                 message: 'Password salah'
             });
+        }
+
+        if (!isHashedPassword(user.password)) {
+            const hashedPassword = await hashPassword(password);
+            db.query('UPDATE user SET password = ? WHERE id_user = ?', [hashedPassword, user.id_user]);
+            user.password = hashedPassword;
         }
 
         return res.json(createAuthResponse(user, 'Login admin berhasil'));
