@@ -3,29 +3,38 @@ const cors = require('cors');
 
 const app = express();
 
+const normalizeOrigin = (origin) => String(origin || '').trim().replace(/\/$/, '');
+
 const defaultAllowedOrigins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
     'http://127.0.0.1:3000'
-];
+].map(normalizeOrigin);
 
 const extraOrigins = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
-    .map((origin) => origin.trim())
+    .map(normalizeOrigin)
     .filter(Boolean);
 
 const allowedOrigins = new Set([...defaultAllowedOrigins, ...extraOrigins]);
 
-app.use(cors({
+const corsOptions = {
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.has(origin)) {
+        const normalizedOrigin = normalizeOrigin(origin);
+        if (!normalizedOrigin || allowedOrigins.has(normalizedOrigin)) {
             return callback(null, true);
         }
         return callback(new Error('Origin tidak diizinkan oleh CORS'));
     },
-    credentials: true
-}));
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json()); 
 
 app.get('/health', (_req, res) => {
