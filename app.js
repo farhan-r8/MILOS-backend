@@ -28,6 +28,13 @@ app.use(cors({
 }));
 app.use(express.json()); 
 
+app.get('/health', (_req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        service: 'milos-backend'
+    });
+});
+
 const userRoutes = require('./routes/userRoutes');
 app.use('/api', userRoutes);
 app.use('/', userRoutes);
@@ -47,13 +54,6 @@ app.use('/', jadwalRoutes);
 const pickupRoutes = require('./routes/pickupRoutes');
 app.use('/api', pickupRoutes);
 app.use('/', pickupRoutes);
-
-app.get('/health', (_req, res) => {
-    res.status(200).json({
-        status: 'ok',
-        service: 'milos-backend'
-    });
-});
 
 const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
