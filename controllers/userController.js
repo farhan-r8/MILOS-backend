@@ -130,6 +130,56 @@ exports.registerNasabah = (req, res) => {
     }, res);
 };
 
+exports.resetNasabahPassword = async (req, res) => {
+    const email = req.body.email;
+    const newPassword = req.body.newPassword;
+
+    if (!email || !newPassword) {
+        return res.status(400).json({
+            message: 'Field wajib: email, newPassword'
+        });
+    }
+
+    if (!isValidEmail(email)) {
+        return res.status(400).json({
+            message: 'Format email tidak valid'
+        });
+    }
+
+    if (String(newPassword).length < 8) {
+        return res.status(400).json({
+            message: 'Password baru minimal 8 karakter'
+        });
+    }
+
+    db.query(
+        "SELECT id_user FROM user WHERE email = ? AND role = 'nasabah' LIMIT 1",
+        [email],
+        async (err, result) => {
+            if (err) return res.status(500).json(err);
+
+            if (!result || result.length === 0) {
+                return res.status(404).json({
+                    message: 'Akun nasabah dengan email tersebut tidak ditemukan'
+                });
+            }
+
+            const hashedPassword = await hashPassword(newPassword);
+            db.query(
+                'UPDATE user SET password = ? WHERE id_user = ?',
+                [hashedPassword, result[0].id_user],
+                (updateErr) => {
+                    if (updateErr) return res.status(500).json(updateErr);
+
+                    return res.json({
+                        message: 'Password berhasil direset. Silakan login dengan password baru.'
+                    });
+                }
+            );
+        }
+    );
+};
+
 exports.getTotalPoin = (req, res) => {
     db.query(`
         SELECT u.nama, SUM(d.poin) as total_poin

@@ -8,6 +8,7 @@ router.get('/users', authenticateUser, requireAdmin, userController.getUsers);
 router.post('/users', authenticateUser, requireAdmin, userController.createUser);
 router.post('/auth/login', userController.loginUser);
 router.post('/auth/register', userController.registerNasabah);
+router.post('/auth/reset-password', userController.resetNasabahPassword);
 router.post('/auth/google/login', userController.loginGoogleUser);
 router.post('/auth/admin/login', userController.loginAdmin);
 router.post('/auth/admin/logout', authenticateUser, requireAdmin, userController.logoutAdmin);
