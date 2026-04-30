@@ -1,7 +1,8 @@
 const db = require('../config/db');
-const { createToken } = require('../utils/token');
+const { createToken, createResetPasswordToken, verifyResetPasswordToken } = require('../utils/token');
 const { verifyGoogleCredential } = require('../utils/googleAuth');
 const { hashPassword, verifyPassword, isHashedPassword } = require('../utils/password');
+const { sendMail } = require('../utils/mailer');
 
 const normalizeRole = (role) => {
     if (role === 'admin' || role === 'nasabah') return role;
@@ -130,13 +131,12 @@ exports.registerNasabah = (req, res) => {
     }, res);
 };
 
-exports.resetNasabahPassword = async (req, res) => {
+exports.requestNasabahPasswordReset = async (req, res) => {
     const email = req.body.email;
-    const newPassword = req.body.newPassword;
 
-    if (!email || !newPassword) {
+    if (!email) {
         return res.status(400).json({
-            message: 'Field wajib: email, newPassword'
+            message: 'Field wajib: email'
         });
     }
 
@@ -146,14 +146,8 @@ exports.resetNasabahPassword = async (req, res) => {
         });
     }
 
-    if (String(newPassword).length < 8) {
-        return res.status(400).json({
-            message: 'Password baru minimal 8 karakter'
-        });
-    }
-
     db.query(
-        "SELECT id_user FROM user WHERE email = ? AND role = 'nasabah' LIMIT 1",
+        "SELECT id_user, nama, email FROM user WHERE email = ? AND role = 'nasabah' LIMIT 1",
         [email],
         async (err, result) => {
             if (err) return res.status(500).json(err);
@@ -161,6 +155,78 @@ exports.resetNasabahPassword = async (req, res) => {
             if (!result || result.length === 0) {
                 return res.status(404).json({
                     message: 'Akun nasabah dengan email tersebut tidak ditemukan'
+                });
+            }
+
+            const user = result[0];
+            const token = createResetPasswordToken({
+                userId: user.id_user,
+                email: user.email,
+                role: 'nasabah'
+            });
+            const frontendBaseUrl = (process.env.FRONTEND_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
+            const resetUrl = `${frontendBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+            await sendMail({
+                to: user.email,
+                subject: 'Reset Password MILOS',
+                text: `Halo ${user.nama}, buka tautan berikut untuk mereset password akun MILOS Anda: ${resetUrl}`,
+                html: `
+                    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                        <h2>Reset Password MILOS</h2>
+                        <p>Halo ${user.nama},</p>
+                        <p>Kami menerima permintaan reset password untuk akun MILOS Anda.</p>
+                        <p>
+                            <a href="${resetUrl}" style="display:inline-block;padding:12px 20px;background:#16a34a;color:#ffffff;text-decoration:none;border-radius:8px;">
+                                Reset Password
+                            </a>
+                        </p>
+                        <p>Atau salin tautan berikut ke browser Anda:</p>
+                        <p>${resetUrl}</p>
+                        <p>Tautan ini hanya berlaku dalam waktu terbatas.</p>
+                    </div>
+                `
+            });
+
+            return res.json({
+                message: 'Tautan reset password berhasil dikirim ke email Anda.'
+            });
+        }
+    );
+};
+
+exports.confirmNasabahPasswordReset = async (req, res) => {
+    const token = req.body.token;
+    const newPassword = req.body.newPassword;
+
+    if (!token || !newPassword) {
+        return res.status(400).json({
+            message: 'Field wajib: token, newPassword'
+        });
+    }
+
+    if (String(newPassword).length < 8) {
+        return res.status(400).json({
+            message: 'Password baru minimal 8 karakter'
+        });
+    }
+
+    const payload = verifyResetPasswordToken(token);
+    if (!payload || payload.role !== 'nasabah' || !payload.userId || !payload.email) {
+        return res.status(400).json({
+            message: 'Token reset password tidak valid atau sudah kedaluwarsa'
+        });
+    }
+
+    db.query(
+        "SELECT id_user FROM user WHERE id_user = ? AND email = ? AND role = 'nasabah' LIMIT 1",
+        [payload.userId, payload.email],
+        async (err, result) => {
+            if (err) return res.status(500).json(err);
+
+            if (!result || result.length === 0) {
+                return res.status(404).json({
+                    message: 'Akun nasabah dengan token tersebut tidak ditemukan'
                 });
             }
 
