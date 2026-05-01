@@ -166,31 +166,37 @@ exports.requestNasabahPasswordReset = async (req, res) => {
             });
             const frontendBaseUrl = (process.env.FRONTEND_BASE_URL || 'http://localhost:5173').replace(/\/$/, '');
             const resetUrl = `${frontendBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+            try {
+                await sendMail({
+                    to: user.email,
+                    subject: 'Reset Password MILOS',
+                    text: `Halo ${user.nama}, buka tautan berikut untuk mereset password akun MILOS Anda: ${resetUrl}`,
+                    html: `
+                        <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+                            <h2>Reset Password MILOS</h2>
+                            <p>Halo ${user.nama},</p>
+                            <p>Kami menerima permintaan reset password untuk akun MILOS Anda.</p>
+                            <p>
+                                <a href="${resetUrl}" style="display:inline-block;padding:12px 20px;background:#16a34a;color:#ffffff;text-decoration:none;border-radius:8px;">
+                                    Reset Password
+                                </a>
+                            </p>
+                            <p>Atau salin tautan berikut ke browser Anda:</p>
+                            <p>${resetUrl}</p>
+                            <p>Tautan ini hanya berlaku dalam waktu terbatas.</p>
+                        </div>
+                    `
+                });
 
-            await sendMail({
-                to: user.email,
-                subject: 'Reset Password MILOS',
-                text: `Halo ${user.nama}, buka tautan berikut untuk mereset password akun MILOS Anda: ${resetUrl}`,
-                html: `
-                    <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-                        <h2>Reset Password MILOS</h2>
-                        <p>Halo ${user.nama},</p>
-                        <p>Kami menerima permintaan reset password untuk akun MILOS Anda.</p>
-                        <p>
-                            <a href="${resetUrl}" style="display:inline-block;padding:12px 20px;background:#16a34a;color:#ffffff;text-decoration:none;border-radius:8px;">
-                                Reset Password
-                            </a>
-                        </p>
-                        <p>Atau salin tautan berikut ke browser Anda:</p>
-                        <p>${resetUrl}</p>
-                        <p>Tautan ini hanya berlaku dalam waktu terbatas.</p>
-                    </div>
-                `
-            });
-
-            return res.json({
-                message: 'Tautan reset password berhasil dikirim ke email Anda.'
-            });
+                return res.json({
+                    message: 'Tautan reset password berhasil dikirim ke email Anda.'
+                });
+            } catch (mailError) {
+                console.error('Gagal mengirim email reset password:', mailError);
+                return res.status(500).json({
+                    message: 'Gagal mengirim email reset password. Silakan coba lagi nanti.'
+                });
+            }
         }
     );
 };
