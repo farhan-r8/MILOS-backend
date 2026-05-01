@@ -20,6 +20,7 @@ const formatTransaksiRow = (row) => ({
     pointsPerKg: Number(row.points_per_kg || 0),
     status: row.status,
     method: row.metode === 'Pickup' ? 'Pickup' : 'Drop-off',
+    notes: row.catatan || '',
     wasteType: row.waste_types || 'Tidak diketahui',
     wasteTypes: row.waste_types
         ? row.waste_types.split(',').map((item) => item.trim()).filter(Boolean)
@@ -31,6 +32,7 @@ exports.createTransaksi = (req, res) => {
     const id_user = req.body.id_user || req.body.userId || authUserId;
     const id_pengurus = req.body.id_pengurus || req.body.adminId || null;
     const metode = mapMetode(req.body.metode || req.body.method);
+    const catatan = req.body.catatan || req.body.notes || null;
 
     if (!id_user) {
         return res.status(400).json({
@@ -39,11 +41,11 @@ exports.createTransaksi = (req, res) => {
     }
 
     const sql = `
-        INSERT INTO transaksi (id_user, id_pengurus, tanggal, status, metode)
-        VALUES (?, ?, NOW(), 'pending', ?)
+        INSERT INTO transaksi (id_user, id_pengurus, tanggal, status, metode, catatan)
+        VALUES (?, ?, NOW(), 'pending', ?, ?)
     `;
 
-    db.query(sql, [id_user, id_pengurus, metode], (err, result) => {
+    db.query(sql, [id_user, id_pengurus, metode, catatan], (err, result) => {
         if (err) return res.status(500).json(err);
 
         return res.status(201).json({
@@ -110,6 +112,7 @@ exports.getTransaksi = (req, res) => {
             t.tanggal,
             t.status,
             t.metode,
+            t.catatan,
             COALESCE(SUM(d.berat), 0) AS total_berat,
             COALESCE(SUM(d.poin), 0) AS total_poin,
             COALESCE(ROUND(SUM(d.poin) / NULLIF(SUM(d.berat), 0)), 0) AS points_per_kg,
@@ -119,7 +122,7 @@ exports.getTransaksi = (req, res) => {
         LEFT JOIN detail_transaksi d ON d.id_transaksi = t.id_transaksi
         LEFT JOIN jenis_sampah js ON js.id_jenis = d.id_jenis
         ${whereClause}
-        GROUP BY t.id_transaksi, t.id_user, u.nama, t.tanggal, t.status, t.metode
+        GROUP BY t.id_transaksi, t.id_user, u.nama, t.tanggal, t.status, t.metode, t.catatan
         ORDER BY t.tanggal DESC
         `,
         params,

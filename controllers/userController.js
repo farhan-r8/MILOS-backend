@@ -3,6 +3,7 @@ const { createToken, createResetPasswordToken, verifyResetPasswordToken } = requ
 const { verifyGoogleCredential } = require('../utils/googleAuth');
 const { hashPassword, verifyPassword, isHashedPassword } = require('../utils/password');
 const { sendMail } = require('../utils/mailer');
+const { getAvailablePointsForUser } = require('../utils/points');
 
 const normalizeRole = (role) => {
     if (role === 'admin' || role === 'nasabah') return role;
@@ -268,27 +269,36 @@ exports.getTotalPoin = (req, res) => {
 exports.getPoinUser = (req, res) => {
     const { id_user } = req.params;
 
-    db.query(`
-        SELECT u.id_user, u.nama, COALESCE(SUM(d.poin), 0) as total_poin
-        FROM user u
-        LEFT JOIN transaksi t ON t.id_user = u.id_user
-        LEFT JOIN detail_transaksi d ON d.id_transaksi = t.id_transaksi
-        WHERE u.id_user = ?
-        GROUP BY u.id_user, u.nama
-    `, [id_user], (err, result) => {
-        if (err) return res.status(500).json(err);
-        if (!result || result.length === 0) {
-            return res.json({
-                userId: String(id_user),
-                totalPoints: 0
-            });
+    db.query(
+        'SELECT id_user, nama FROM user WHERE id_user = ? LIMIT 1',
+        [id_user],
+        async (err, result) => {
+            if (err) return res.status(500).json(err);
+            if (!result || result.length === 0) {
+                return res.json({
+                    userId: String(id_user),
+                    totalPoints: 0,
+                    earnedPoints: 0,
+                    reservedPoints: 0
+                });
+            }
+
+            try {
+                const points = await getAvailablePointsForUser(id_user);
+                return res.json({
+                    userId: String(result[0].id_user),
+                    name: result[0].nama,
+                    totalPoints: points.availablePoints,
+                    earnedPoints: points.earnedPoints,
+                    reservedPoints: points.reservedPoints
+                });
+            } catch (pointError) {
+                return res.status(500).json({
+                    message: pointError.message || 'Gagal menghitung poin pengguna'
+                });
+            }
         }
-        return res.json({
-            userId: String(result[0].id_user),
-            name: result[0].nama,
-            totalPoints: Number(result[0].total_poin || 0)
-        });
-    });
+    );
 };
 
 exports.loginUser = (req, res) => {

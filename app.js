@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const { ensureRewardSchema } = require('./utils/rewardSchema');
+const { ensureTransactionSchema } = require('./utils/transactionSchema');
 
 const app = express();
 
@@ -36,6 +38,14 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json()); 
 
+ensureRewardSchema().catch((error) => {
+    console.error('Gagal menyiapkan schema rewards:', error);
+});
+
+ensureTransactionSchema().catch((error) => {
+    console.error('Gagal menyiapkan schema transaksi:', error);
+});
+
 app.get('/health', (_req, res) => {
     res.status(200).json({
         status: 'ok',
@@ -46,6 +56,10 @@ app.get('/health', (_req, res) => {
 const userRoutes = require('./routes/userRoutes');
 app.use('/api', userRoutes);
 app.use('/', userRoutes);
+
+const rewardRoutes = require('./routes/rewardRoutes');
+app.use('/api', rewardRoutes);
+app.use('/', rewardRoutes);
 
 const transaksiRoutes = require('./routes/transaksiRoutes');
 app.use('/api', transaksiRoutes);
