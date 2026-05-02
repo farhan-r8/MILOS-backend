@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const { ensureRewardSchema } = require('./utils/rewardSchema');
 const { ensureTransactionSchema } = require('./utils/transactionSchema');
-const { ensurePickupSchema } = require('./utils/pickupSchema');
 
 const app = express();
 
@@ -45,10 +44,6 @@ ensureRewardSchema().catch((error) => {
 
 ensureTransactionSchema().catch((error) => {
     console.error('Gagal menyiapkan schema transaksi:', error);
-});
-
-ensurePickupSchema().catch((error) => {
-    console.error('Gagal menyiapkan schema pickup:', error);
 });
 
 app.get('/health', (_req, res) => {

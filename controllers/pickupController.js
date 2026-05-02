@@ -1,5 +1,4 @@
 const db = require('../config/db');
-const { geocodeAddress } = require('../utils/geocoding');
 
 const buildPickupNotes = (notes, extraData) => {
     const payload = {
@@ -7,10 +6,7 @@ const buildPickupNotes = (notes, extraData) => {
         wasteType: extraData.wasteType || '',
         estimatedWeight: extraData.estimatedWeight || '',
         pickupDate: extraData.pickupDate || '',
-        timeSlot: extraData.timeSlot || '',
-        latitude: extraData.latitude ?? null,
-        longitude: extraData.longitude ?? null,
-        geocodedAddress: extraData.geocodedAddress || ''
+        timeSlot: extraData.timeSlot || ''
     };
 
     return JSON.stringify(payload);
@@ -23,10 +19,7 @@ const parsePickupNotes = (rawValue) => {
             wasteType: '',
             estimatedWeight: '',
             pickupDate: '',
-            timeSlot: '',
-            latitude: null,
-            longitude: null,
-            geocodedAddress: ''
+            timeSlot: ''
         };
     }
 
@@ -37,10 +30,7 @@ const parsePickupNotes = (rawValue) => {
             wasteType: parsed.wasteType || '',
             estimatedWeight: parsed.estimatedWeight || '',
             pickupDate: parsed.pickupDate || '',
-            timeSlot: parsed.timeSlot || '',
-            latitude: typeof parsed.latitude === 'number' ? parsed.latitude : null,
-            longitude: typeof parsed.longitude === 'number' ? parsed.longitude : null,
-            geocodedAddress: parsed.geocodedAddress || ''
+            timeSlot: parsed.timeSlot || ''
         };
     } catch (_error) {
         return {
@@ -48,10 +38,7 @@ const parsePickupNotes = (rawValue) => {
             wasteType: '',
             estimatedWeight: '',
             pickupDate: '',
-            timeSlot: '',
-            latitude: null,
-            longitude: null,
-            geocodedAddress: ''
+            timeSlot: ''
         };
     }
 };
@@ -75,9 +62,6 @@ const formatPickupRow = (row) => {
         date: extra.pickupDate || row.scheduled_at || row.requested_at,
         status: row.status,
         notes: extra.notes || '',
-        latitude: row.latitude !== null && row.latitude !== undefined ? Number(row.latitude) : extra.latitude,
-        longitude: row.longitude !== null && row.longitude !== undefined ? Number(row.longitude) : extra.longitude,
-        geocodedAddress: row.alamat_tergeocode || extra.geocodedAddress || null,
         requestedAt: row.requested_at,
         scheduledAt: row.scheduled_at
     };
@@ -92,30 +76,17 @@ exports.createPickup = async (req, res) => {
     if (!id_user) {
         return res.status(400).json({ message: 'Field wajib: id_user/userId' });
     }
-
-    const geocodedLocation = await geocodeAddress(alamat);
     const catatan = buildPickupNotes(req.body.catatan || req.body.notes || null, {
         wasteType: req.body.wasteType,
         estimatedWeight: req.body.estimatedWeight,
         pickupDate: req.body.pickupDate,
-        timeSlot: req.body.timeSlot,
-        latitude: geocodedLocation?.latitude ?? null,
-        longitude: geocodedLocation?.longitude ?? null,
-        geocodedAddress: geocodedLocation?.formattedAddress || ''
+        timeSlot: req.body.timeSlot
     });
 
     db.query(
-        `INSERT INTO pengajuan_pickup (id_user, id_jadwal, alamat, latitude, longitude, alamat_tergeocode, catatan, status, requested_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())`,
-        [
-            id_user,
-            id_jadwal,
-            alamat,
-            geocodedLocation?.latitude ?? null,
-            geocodedLocation?.longitude ?? null,
-            geocodedLocation?.formattedAddress || null,
-            catatan
-        ],
+        `INSERT INTO pengajuan_pickup (id_user, id_jadwal, alamat, catatan, status, requested_at)
+         VALUES (?, ?, ?, ?, 'pending', NOW())`,
+        [id_user, id_jadwal, alamat, catatan],
         (err, result) => {
             if (err) return res.status(500).json(err);
             return res.status(201).json({
@@ -144,7 +115,7 @@ exports.getPickup = (req, res) => {
 
     db.query(
         `SELECT p.id_pickup, p.id_user, u.nama, u.phone, p.id_jadwal, j.wilayah, j.hari, j.jam,
-                p.alamat, p.latitude, p.longitude, p.alamat_tergeocode, p.catatan, p.status, p.requested_at, p.scheduled_at
+                p.alamat, p.catatan, p.status, p.requested_at, p.scheduled_at
          FROM pengajuan_pickup p
          JOIN user u ON u.id_user = p.id_user
          LEFT JOIN jadwal j ON j.id_jadwal = p.id_jadwal
