@@ -134,6 +134,15 @@ exports.getTransaksi = (req, res) => {
 };
 
 exports.getWasteTypes = (_req, res) => {
+    const mapWasteTypes = (rows) =>
+        rows.map((row) => ({
+            id: String(row.id_jenis),
+            value: String(row.id_jenis),
+            label: row.nama_jenis,
+            unit: row.satuan || 'kg',
+            pointsPerKg: Number(row.poin_per_satuan || 0)
+        }));
+
     db.query(
         `
         SELECT id_jenis, nama_jenis, satuan, poin_per_satuan, is_aktif
@@ -144,14 +153,20 @@ exports.getWasteTypes = (_req, res) => {
         (err, result) => {
             if (err) return res.status(500).json(err);
 
-            return res.json(
-                result.map((row) => ({
-                    id: String(row.id_jenis),
-                    value: String(row.id_jenis),
-                    label: row.nama_jenis,
-                    unit: row.satuan || 'kg',
-                    pointsPerKg: Number(row.poin_per_satuan || 0)
-                }))
+            if (result && result.length > 0) {
+                return res.json(mapWasteTypes(result));
+            }
+
+            db.query(
+                `
+                SELECT id_jenis, nama_jenis, satuan, poin_per_satuan, is_aktif
+                FROM jenis_sampah
+                ORDER BY nama_jenis ASC
+                `,
+                (fallbackErr, fallbackResult) => {
+                    if (fallbackErr) return res.status(500).json(fallbackErr);
+                    return res.json(mapWasteTypes(fallbackResult || []));
+                }
             );
         }
     );
