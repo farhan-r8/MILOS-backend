@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { emitNotification } = require('../utils/realtime');
 
 const buildPickupNotes = (notes, extraData) => {
     const payload = {
@@ -67,19 +68,104 @@ const formatPickupRow = (row) => {
     };
 };
 
+const pickupDayFormatter = new Intl.DateTimeFormat('id-ID', { weekday: 'long' });
+const normalizeDayName = (value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    const mapping = {
+        minggu: 'minggu',
+        senin: 'senin',
+        selasa: 'selasa',
+        rabu: 'rabu',
+        kamis: 'kamis',
+        jumat: 'jumat',
+        "jum'at": 'jumat',
+        sabtu: 'sabtu'
+    };
+
+    return mapping[normalized] || normalized;
+};
+
+const promiseDb = db.promise();
+
 exports.createPickup = async (req, res) => {
     const authUserId = req.authUser?.id;
     const id_user = req.body.id_user || req.body.userId || authUserId;
     const id_jadwal = req.body.id_jadwal || req.body.scheduleId || null;
     const alamat = req.body.alamat || req.body.address || null;
 
+    const pickupDate = req.body.pickupDate;
+
     if (!id_user) {
         return res.status(400).json({ message: 'Field wajib: id_user/userId' });
     }
+
+    if (!id_jadwal) {
+        return res.status(400).json({ message: 'Jadwal admin harus dipilih' });
+    }
+
+    if (!alamat) {
+        return res.status(400).json({ message: 'Alamat pickup harus diisi' });
+    }
+
+    if (!pickupDate) {
+        return res.status(400).json({ message: 'Tanggal pickup harus dipilih' });
+    }
+
+    const estimatedWeight = Number(req.body.estimatedWeight || 0);
+    if (estimatedWeight < 2) {
+        return res.status(400).json({ message: 'Minimum berat pickup adalah 2 kg' });
+    }
+
+    const pickupDay = normalizeDayName(pickupDayFormatter.format(new Date(pickupDate)));
+    if (pickupDay === 'minggu') {
+        return res.status(400).json({ message: 'Hari Minggu tidak melayani pickup' });
+    }
+
+    try {
+        const [scheduleRows] = await promiseDb.query(
+            'SELECT id_jadwal, wilayah, hari, jam, is_aktif FROM jadwal WHERE id_jadwal = ? LIMIT 1',
+            [id_jadwal]
+        );
+
+        if (!scheduleRows || scheduleRows.length === 0) {
+            return res.status(404).json({ message: 'Jadwal pickup tidak ditemukan' });
+        }
+
+        const schedule = scheduleRows[0];
+        if (Number(schedule.is_aktif) !== 1) {
+            return res.status(400).json({ message: 'Jadwal pickup sedang tidak aktif' });
+        }
+
+        if (normalizeDayName(schedule.hari) !== pickupDay) {
+            return res.status(400).json({ message: 'Tanggal pickup harus sesuai dengan hari jadwal yang dipilih' });
+        }
+
+        const [sameDayRows] = await promiseDb.query(
+            `
+            SELECT catatan, status
+            FROM pengajuan_pickup
+            WHERE status <> 'rejected'
+            `
+        );
+
+        const sameDayCount = (sameDayRows || []).filter((row) => {
+            const extra = parsePickupNotes(row.catatan);
+            return extra.pickupDate === pickupDate;
+        }).length;
+
+        if (sameDayCount >= 10) {
+            return res.status(400).json({ message: 'Kuota pickup untuk tanggal tersebut sudah penuh (maksimal 10 pickup per hari)' });
+        }
+    } catch (validationError) {
+        return res.status(500).json({
+            message: validationError.message || 'Gagal memvalidasi pengajuan pickup'
+        });
+    }
+
     const catatan = buildPickupNotes(req.body.catatan || req.body.notes || null, {
         wasteType: req.body.wasteType,
         estimatedWeight: req.body.estimatedWeight,
-        pickupDate: req.body.pickupDate,
+        pickupDate,
         timeSlot: req.body.timeSlot
     });
 
@@ -89,6 +175,17 @@ exports.createPickup = async (req, res) => {
         [id_user, id_jadwal, alamat, catatan],
         (err, result) => {
             if (err) return res.status(500).json(err);
+            emitNotification({
+                role: 'admin',
+                title: 'Pickup baru masuk',
+                message: `Ada permintaan pickup baru untuk tanggal ${pickupDate}.`,
+                entity: 'pickup',
+                payload: {
+                    pickupId: result.insertId,
+                    userId: String(id_user)
+                }
+            });
+
             return res.status(201).json({
                 message: 'Pengajuan pickup berhasil',
                 id_pickup: result.insertId
@@ -148,7 +245,45 @@ exports.updatePickupStatus = (req, res) => {
         (err, result) => {
             if (err) return res.status(500).json(err);
             if (result.affectedRows === 0) return res.status(404).json({ message: 'Pickup tidak ditemukan' });
-            return res.json({ message: 'Status pickup berhasil diupdate' });
+
+            db.query(
+                'SELECT id_user FROM pengajuan_pickup WHERE id_pickup = ? LIMIT 1',
+                [id],
+                (fetchErr, rows) => {
+                    if (!fetchErr && rows && rows.length > 0) {
+                        emitNotification({
+                            userId: String(rows[0].id_user),
+                            title: 'Status pickup diperbarui',
+                            message:
+                                status === 'scheduled'
+                                    ? 'Permintaan pickup Anda telah dijadwalkan admin.'
+                                    : status === 'approved'
+                                    ? 'Permintaan pickup Anda telah disetujui admin.'
+                                    : status === 'rejected'
+                                    ? 'Permintaan pickup Anda ditolak admin.'
+                                    : `Status pickup Anda berubah menjadi ${status}.`,
+                            entity: 'pickup',
+                            payload: {
+                                pickupId: Number(id),
+                                status
+                            }
+                        });
+                    }
+
+                    emitNotification({
+                        role: 'admin',
+                        title: 'Pickup diproses',
+                        message: `Status pickup #${id} berubah menjadi ${status}.`,
+                        entity: 'pickup',
+                        payload: {
+                            pickupId: Number(id),
+                            status
+                        }
+                    });
+
+                    return res.json({ message: 'Status pickup berhasil diupdate' });
+                }
+            );
         }
     );
 };

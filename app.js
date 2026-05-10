@@ -1,9 +1,12 @@
 const express = require('express');
+const http = require('http');
 const cors = require('cors');
 const { ensureRewardSchema } = require('./utils/rewardSchema');
 const { ensureTransactionSchema } = require('./utils/transactionSchema');
+const { initRealtime } = require('./utils/realtime');
 
 const app = express();
+const server = http.createServer(app);
 
 const normalizeOrigin = (origin) => String(origin || '').trim().replace(/\/$/, '');
 
@@ -78,8 +81,10 @@ app.use('/api', pickupRoutes);
 app.use('/', pickupRoutes);
 
 const PORT = Number(process.env.PORT) || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+initRealtime(server, Array.from(allowedOrigins));
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);
 });
 
-module.exports = app;
+module.exports = { app, server };

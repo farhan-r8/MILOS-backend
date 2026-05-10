@@ -302,7 +302,9 @@ exports.getPoinUser = (req, res) => {
 };
 
 exports.loginUser = (req, res) => {
-    const { email, password } = req.body;
+    const rawEmail = req.body.email || '';
+    const email = rawEmail.trim().toLowerCase();
+    const { password } = req.body;
     const role = normalizeRole(req.body.role);
 
     if (!email || !password) {
@@ -453,7 +455,9 @@ exports.loginGoogleUser = async (req, res) => {
 };
 
 exports.loginAdmin = (req, res) => {
-    const { email, password } = req.body;
+    const rawEmail = req.body.email || '';
+    const email = rawEmail.trim().toLowerCase();
+    const { password } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({

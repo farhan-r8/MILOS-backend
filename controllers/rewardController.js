@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { getAvailablePointsForUser } = require('../utils/points');
+const { emitNotification } = require('../utils/realtime');
 
 const mapRewardRow = (row) => ({
     id: Number(row.id_reward),
@@ -199,6 +200,17 @@ exports.createRedemption = async (req, res) => {
                     [id, authUserId, quantity, totalPoints, address, notes || null],
                     (insertErr, insertResult) => {
                         if (insertErr) return res.status(500).json(insertErr);
+                        emitNotification({
+                            role: 'admin',
+                            title: 'Penukaran hadiah baru',
+                            message: `Ada permintaan penukaran hadiah baru dari nasabah.`,
+                            entity: 'redemption',
+                            payload: {
+                                redemptionId: insertResult.insertId,
+                                rewardId: Number(id),
+                                userId: String(authUserId)
+                            }
+                        });
                         return res.status(201).json({
                             message: 'Permintaan penukaran berhasil dibuat',
                             id: insertResult.insertId
@@ -310,6 +322,31 @@ exports.updateRedemptionStatus = (req, res) => {
                     [status, authUserId || null, id],
                     (updateErr) => {
                         if (updateErr) return res.status(500).json(updateErr);
+                        emitNotification({
+                            userId: String(redemption.id_user),
+                            title: 'Status penukaran diperbarui',
+                            message:
+                                status === 'approved'
+                                    ? 'Permintaan penukaran Anda sudah disetujui admin.'
+                                    : status === 'completed'
+                                    ? 'Penukaran hadiah Anda sudah selesai diproses.'
+                                    : 'Permintaan penukaran Anda ditolak admin.',
+                            entity: 'redemption',
+                            payload: {
+                                redemptionId: Number(id),
+                                status
+                            }
+                        });
+                        emitNotification({
+                            role: 'admin',
+                            title: 'Penukaran hadiah diproses',
+                            message: `Penukaran hadiah #${id} berhasil diperbarui menjadi ${status}.`,
+                            entity: 'redemption',
+                            payload: {
+                                redemptionId: Number(id),
+                                status
+                            }
+                        });
                         return res.json({ message: 'Status penukaran berhasil diperbarui' });
                     }
                 );

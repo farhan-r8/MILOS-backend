@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { emitNotification } = require('../utils/realtime');
 
 const mapMetode = (metode) => {
     if (!metode) return 'Drop-off';
@@ -47,6 +48,17 @@ exports.createTransaksi = (req, res) => {
 
     db.query(sql, [id_user, id_pengurus, metode, catatan], (err, result) => {
         if (err) return res.status(500).json(err);
+
+        emitNotification({
+            role: 'admin',
+            title: 'Transaksi baru masuk',
+            message: `Ada transaksi ${metode} baru yang menunggu verifikasi admin.`,
+            entity: 'transaction',
+            payload: {
+                transactionId: result.insertId,
+                userId: String(id_user)
+            }
+        });
 
         return res.status(201).json({
             message: 'Transaksi berhasil dibuat',
@@ -175,24 +187,95 @@ exports.getWasteTypes = (_req, res) => {
 exports.verifyTransaksi = (req, res) => {
     const { id } = req.params;
     const id_pengurus = req.authUser?.id;
-    const status = req.body.status;
+    const { status, weight, wasteTypeId, condition } = req.body;
 
     if (!['verified', 'rejected'].includes(status)) {
         return res.status(400).json({ message: 'Status verifikasi hanya: verified/rejected' });
     }
 
-    const sql = `
-        UPDATE transaksi
-        SET status = ?, id_pengurus = ?
-        WHERE id_transaksi = ?
-    `;
-    db.query(sql, [status, id_pengurus, id], (err, result) => {
-        if (err) return res.status(500).json(err);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
-        }
-        return res.json({ message: 'Status transaksi berhasil diverifikasi' });
-    });
+    const processVerification = (catatanTambahan = null) => {
+        const sql = `
+            UPDATE transaksi
+            SET status = ?, id_pengurus = ?, catatan = COALESCE(?, catatan)
+            WHERE id_transaksi = ?
+        `;
+        db.query(sql, [status, id_pengurus, catatanTambahan, id], (err, result) => {
+            if (err) return res.status(500).json(err);
+            if (result.affectedRows === 0) {
+                return res.status(404).json({ message: 'Transaksi tidak ditemukan' });
+            }
+
+            db.query(
+                'SELECT id_user FROM transaksi WHERE id_transaksi = ? LIMIT 1',
+                [id],
+                (fetchErr, rows) => {
+                    if (!fetchErr && rows && rows.length > 0) {
+                        emitNotification({
+                            userId: String(rows[0].id_user),
+                            title: 'Status transaksi diperbarui',
+                            message:
+                                status === 'verified'
+                                    ? 'Transaksi Anda telah diverifikasi dan poin sudah dihitung.'
+                                    : 'Transaksi Anda ditolak oleh admin.',
+                            entity: 'transaction',
+                            payload: {
+                                transactionId: Number(id),
+                                status
+                            }
+                        });
+                    }
+
+                    emitNotification({
+                        role: 'admin',
+                        title: 'Transaksi diproses',
+                        message: `Transaksi #${id} berhasil diperbarui menjadi ${status}.`,
+                        entity: 'transaction',
+                        payload: {
+                            transactionId: Number(id),
+                            status
+                        }
+                    });
+
+                    return res.json({ message: 'Status transaksi berhasil diverifikasi' });
+                }
+            );
+        });
+    };
+
+    if (status === 'verified' && weight && wasteTypeId) {
+        const getPoin = 'SELECT poin_per_satuan FROM jenis_sampah WHERE id_jenis = ?';
+        db.query(getPoin, [wasteTypeId], (err, result) => {
+            if (err) return res.status(500).json(err);
+            if (!result || result.length === 0) {
+                return res.status(404).json({ message: 'Jenis sampah tidak ditemukan' });
+            }
+
+            const poinPerSatuan = Number(result[0].poin_per_satuan || 0);
+            const multiplier = condition === 'Basah' ? 0.6 : 1.0;
+            const totalPoin = Math.floor(weight * poinPerSatuan * multiplier);
+
+            // Update or Insert detail_transaksi
+            db.query('SELECT id_detail FROM detail_transaksi WHERE id_transaksi = ? LIMIT 1', [id], (err2, details) => {
+                if (err2) return res.status(500).json(err2);
+
+                if (details.length > 0) {
+                    const updateDetail = 'UPDATE detail_transaksi SET id_jenis = ?, berat = ?, poin = ? WHERE id_transaksi = ?';
+                    db.query(updateDetail, [wasteTypeId, weight, totalPoin, id], (err3) => {
+                        if (err3) return res.status(500).json(err3);
+                        processVerification(condition ? `Kondisi: ${condition}` : null);
+                    });
+                } else {
+                    const insertDetail = 'INSERT INTO detail_transaksi (id_transaksi, id_jenis, berat, poin) VALUES (?, ?, ?, ?)';
+                    db.query(insertDetail, [id, wasteTypeId, weight, totalPoin], (err3) => {
+                        if (err3) return res.status(500).json(err3);
+                        processVerification(condition ? `Kondisi: ${condition}` : null);
+                    });
+                }
+            });
+        });
+    } else {
+        processVerification();
+    }
 };
 
 exports.getLaporanSummary = (_req, res) => {
