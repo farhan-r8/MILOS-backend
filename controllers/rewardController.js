@@ -82,6 +82,14 @@ exports.createReward = (req, res) => {
         [name, description, pointsRequired, stock, category],
         (err, result) => {
             if (err) return res.status(500).json(err);
+
+            emitNotification({
+                role: 'nasabah',
+                title: 'Hadiah Baru',
+                message: `Katalog hadiah MILOS telah ditambahkan: ${name}. Tukarkan poin Anda sekarang!`,
+                entity: 'general'
+            });
+
             return res.status(201).json({
                 message: 'Barang hadiah berhasil ditambahkan',
                 id: result.insertId
@@ -122,6 +130,14 @@ exports.updateReward = (req, res) => {
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Barang hadiah tidak ditemukan' });
             }
+
+            emitNotification({
+                role: 'nasabah',
+                title: 'Pembaruan Katalog Hadiah',
+                message: `Terdapat pembaruan informasi atau stok pada katalog hadiah kami.`,
+                entity: 'general'
+            });
+
             return res.json({ message: 'Barang hadiah berhasil diperbarui' });
         }
     );
@@ -138,6 +154,14 @@ exports.deleteReward = (req, res) => {
             if (result.affectedRows === 0) {
                 return res.status(404).json({ message: 'Barang hadiah tidak ditemukan' });
             }
+
+            emitNotification({
+                role: 'nasabah',
+                title: 'Hadiah Dinonaktifkan',
+                message: `Salah satu item hadiah telah ditarik dari katalog untuk sementara.`,
+                entity: 'general'
+            });
+
             return res.json({ message: 'Barang hadiah berhasil dinonaktifkan' });
         }
     );

@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { emitNotification } = require('../utils/realtime');
 
 exports.getJadwal = (_req, res) => {
     db.query(
@@ -32,6 +33,14 @@ exports.createJadwal = (req, res) => {
             [wilayah, hari, jam, keterangan || null],
             (err, result) => {
                 if (err) return res.status(500).json(err);
+
+                emitNotification({
+                    role: 'nasabah',
+                    title: 'Jadwal Baru',
+                    message: `Admin telah menambahkan jadwal baru untuk wilayah ${wilayah} hari ${hari}.`,
+                    entity: 'general'
+                });
+
                 return res.status(201).json({ message: 'Jadwal berhasil dibuat', id_jadwal: result.insertId });
             }
         );
@@ -74,6 +83,14 @@ exports.updateJadwal = (req, res) => {
                 [wilayah, hari, jam, keterangan, is_aktif, id],
                 (err, result) => {
                     if (err) return res.status(500).json(err);
+
+                    emitNotification({
+                        role: 'nasabah',
+                        title: 'Jadwal Diperbarui',
+                        message: `Admin telah memperbarui jadwal untuk wilayah ${v_wilayah} hari ${v_hari}.`,
+                        entity: 'general'
+                    });
+
                     return res.json({ message: 'Jadwal berhasil diupdate' });
                 }
             );
@@ -86,6 +103,14 @@ exports.deleteJadwal = (req, res) => {
     db.query('DELETE FROM jadwal WHERE id_jadwal = ?', [id], (err, result) => {
         if (err) return res.status(500).json(err);
         if (result.affectedRows === 0) return res.status(404).json({ message: 'Jadwal tidak ditemukan' });
+
+        emitNotification({
+            role: 'nasabah',
+            title: 'Jadwal Dihapus',
+            message: `Admin telah menghapus salah satu jadwal pengambilan.`,
+            entity: 'general'
+        });
+
         return res.json({ message: 'Jadwal berhasil dihapus' });
     });
 };

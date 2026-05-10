@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { emitNotification } = require('../utils/realtime');
 
 const mapRow = (row) => ({
     id: row.id_jenis,
@@ -56,6 +57,14 @@ exports.createJenisSampah = (req, res) => {
     `;
     db.query(sql, [nama, satuan, poinPerSatuan], (err, result) => {
         if (err) return res.status(500).json(err);
+
+        emitNotification({
+            role: 'nasabah',
+            title: 'Jenis Sampah Baru',
+            message: `Kini Anda bisa menabung sampah ${nama} dengan poin ${poinPerSatuan}/${satuan}.`,
+            entity: 'general'
+        });
+
         return res.status(201).json({
             message: 'Jenis sampah berhasil ditambahkan',
             id: result.insertId
@@ -105,6 +114,14 @@ exports.updateJenisSampah = (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Jenis sampah tidak ditemukan' });
         }
+
+        emitNotification({
+            role: 'nasabah',
+            title: 'Jenis Sampah Diperbarui',
+            message: `Admin telah memperbarui informasi harga atau ketersediaan jenis sampah.`,
+            entity: 'general'
+        });
+
         return res.json({ message: 'Jenis sampah berhasil diupdate' });
     });
 };
@@ -116,6 +133,14 @@ exports.deleteJenisSampah = (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Jenis sampah tidak ditemukan' });
         }
+
+        emitNotification({
+            role: 'nasabah',
+            title: 'Jenis Sampah Dihapus',
+            message: `Salah satu kategori jenis sampah tidak lagi tersedia.`,
+            entity: 'general'
+        });
+
         return res.json({ message: 'Jenis sampah berhasil dihapus' });
     });
 };
