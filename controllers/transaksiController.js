@@ -236,6 +236,12 @@ exports.verifyTransaksi = (req, res) => {
                         }
                     });
 
+                    req.io.emit('milos:realtime', {
+                        title: status === 'verified' ? 'Transaksi Diverifikasi' : 'Transaksi Ditolak',
+                        message: `Transaksi #${id} berstatus ${status}.`,
+                        type: status === 'verified' ? 'success' : 'warning'
+                    });
+
                     return res.json({ message: 'Status transaksi berhasil diverifikasi' });
                 }
             );

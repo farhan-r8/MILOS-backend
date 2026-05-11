@@ -81,7 +81,12 @@ app.use('/api', pickupRoutes);
 app.use('/', pickupRoutes);
 
 const PORT = Number(process.env.PORT) || 3000;
-initRealtime(server, Array.from(allowedOrigins));
+const io = initRealtime(server, Array.from(allowedOrigins));
+
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);

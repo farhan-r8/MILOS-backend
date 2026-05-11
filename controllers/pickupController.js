@@ -186,6 +186,12 @@ exports.createPickup = async (req, res) => {
                 }
             });
 
+            req.io.emit('milos:realtime', {
+                title: 'Pickup Baru',
+                message: `Ada permintaan pickup baru untuk tanggal ${pickupDate}.`,
+                type: 'info'
+            });
+
             return res.status(201).json({
                 message: 'Pengajuan pickup berhasil',
                 id_pickup: result.insertId
@@ -282,6 +288,12 @@ exports.updatePickupStatus = (req, res) => {
                     });
 
                     return res.json({ message: 'Status pickup berhasil diupdate' });
+                }
+            );
+        }
+    );
+};
+       return res.json({ message: 'Status pickup berhasil diupdate' });
                 }
             );
         }
