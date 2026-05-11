@@ -186,11 +186,13 @@ exports.createPickup = async (req, res) => {
                 }
             });
 
-            req.io.emit('milos:realtime', {
-                title: 'Pickup Baru',
-                message: `Ada permintaan pickup baru untuk tanggal ${pickupDate}.`,
-                type: 'info'
-            });
+            if (req.io) {
+                req.io.emit('milos:realtime', {
+                    title: 'Pickup Baru',
+                    message: `Ada permintaan pickup baru untuk tanggal ${pickupDate}.`,
+                    type: 'info'
+                });
+            }
 
             return res.status(201).json({
                 message: 'Pengajuan pickup berhasil',
@@ -287,13 +289,15 @@ exports.updatePickupStatus = (req, res) => {
                         }
                     });
 
+                    if (req.io) {
+                        req.io.emit('milos:realtime', {
+                            title: status === 'rejected' ? 'Pickup Ditolak' : 'Pickup Berhasil',
+                            message: `Permintaan pickup #${id} sekarang berstatus ${status}.`,
+                            type: status === 'rejected' ? 'warning' : 'success'
+                        });
+                    }
+
                     return res.json({ message: 'Status pickup berhasil diupdate' });
-                }
-            );
-        }
-    );
-};
-       return res.json({ message: 'Status pickup berhasil diupdate' });
                 }
             );
         }

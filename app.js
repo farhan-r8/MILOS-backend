@@ -14,7 +14,9 @@ const defaultAllowedOrigins = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://localhost:3000',
-    'http://127.0.0.1:3000'
+    'http://127.0.0.1:3000',
+    'https://bank-sampah-milos.vercel.app',
+    'https://milos-frontend.vercel.app'
 ].map(normalizeOrigin);
 
 const extraOrigins = (process.env.ALLOWED_ORIGINS || '')
@@ -27,7 +29,12 @@ const allowedOrigins = new Set([...defaultAllowedOrigins, ...extraOrigins]);
 const corsOptions = {
     origin: (origin, callback) => {
         const normalizedOrigin = normalizeOrigin(origin);
-        if (!normalizedOrigin || allowedOrigins.has(normalizedOrigin)) {
+        if (!normalizedOrigin) return callback(null, true);
+
+        const isVercel = normalizedOrigin.endsWith('.vercel.app');
+        const isAllowed = allowedOrigins.has(normalizedOrigin);
+
+        if (isVercel || isAllowed) {
             return callback(null, true);
         }
         return callback(new Error('Origin tidak diizinkan oleh CORS'));
@@ -40,6 +47,14 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json()); 
+
+const PORT = Number(process.env.PORT) || 3000;
+const io = initRealtime(server, Array.from(allowedOrigins));
+
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
 
 ensureRewardSchema().catch((error) => {
     console.error('Gagal menyiapkan schema rewards:', error);
@@ -79,14 +94,6 @@ app.use('/', jadwalRoutes);
 const pickupRoutes = require('./routes/pickupRoutes');
 app.use('/api', pickupRoutes);
 app.use('/', pickupRoutes);
-
-const PORT = Number(process.env.PORT) || 3000;
-const io = initRealtime(server, Array.from(allowedOrigins));
-
-app.use((req, res, next) => {
-    req.io = io;
-    next();
-});
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);
